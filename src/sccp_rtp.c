@@ -156,7 +156,7 @@ boolean_t sccp_rtp_createServer(constDevicePtr d, constChannelPtr c, sccp_rtp_ty
 	char buf[NI_MAXHOST + NI_MAXSERV];
 	sccp_copy_string(buf, sccp_netsock_stringify(phone_remote), sizeof(buf));
 	boolean_t isMappedIPv4 = sccp_netsock_ipv4_mapped(phone_remote, phone_remote);
-	sccp_log(DEBUGCAT_RTP) (VERBOSE_PREFIX_3 "%s: (createAudioServer) updated phone %s destination to : %s, family:%s, mapped: %s\n", c->designator, sccp_rtp_type2str(type), buf, sccp_netsock_is_IPv4(phone_remote) ? "IPv4" : "IPv6", isMappedIPv4 ? "True" : "False");
+	sccp_log(DEBUGCAT_RTP) (VERBOSE_PREFIX_3 "%s: (sccp_rtp_createRtpServer) updated phone %s destination to : %s, family:%s, mapped: %s\n", c->designator, sccp_rtp_type2str(type), buf, sccp_netsock_is_IPv4(phone_remote) ? "IPv4" : "IPv6", isMappedIPv4 ? "True" : "False");
 
 	return rtpResult;
 }

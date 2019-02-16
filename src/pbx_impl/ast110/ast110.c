@@ -18,7 +18,6 @@
 #include "sccp_utils.h"
 #include "sccp_indicate.h"
 #include "sccp_hint.h"
-#include "sccp_mwi.h"
 #include "sccp_appfunctions.h"
 #include "sccp_management.h"
 #include "sccp_netsock.h"
@@ -136,7 +135,7 @@ static struct ast_channel_tech sccp_tech = {
 	exception:		NULL,
 //	bridge:			sccp_astwrap_rtpBridge,
 	bridge:			ast_rtp_instance_bridge,
-	early_bridge:		NULL,
+	early_bridge:		ast_rtp_instance_early_bridge,
 	indicate:		sccp_astwrap_indicate,
 	fixup:			sccp_astwrap_fixup,
 	setoption:		NULL,
@@ -177,7 +176,7 @@ struct ast_channel_tech sccp_tech = {
 	//.transfer 		= sccp_pbx_transfer,
 	//.bridge 		= sccp_astwrap_rtpBridge,
 	.bridge 		= ast_rtp_instance_bridge,
-//	.early_bridge           = ast_rtp_instance_early_bridge,
+	.early_bridge           = ast_rtp_instance_early_bridge,
 	//.bridged_channel      =
 
 	.send_text 		= sccp_pbx_sendtext,
@@ -2976,7 +2975,6 @@ static int unload_module(void)
 	ast_channel_unregister(&sccp_tech);
 	sccp_unregister_dialplan_functions();
 	sccp_unregister_cli();
-	sccp_mwi_module_stop();
 #ifdef CS_SCCP_MANAGER
 	sccp_unregister_management();
 #endif

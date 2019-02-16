@@ -571,8 +571,7 @@ void sccp_channel_openReceiveChannel(constChannelPtr channel)
 
 	/* create the rtp stuff. It must be create before setting the channel AST_STATE_UP. otherwise no audio will be played */
 	sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_3 "%s: Ask the device to open a RTP port on channel %s. Codec: %s, echocancel: %s\n", d->id, channel->designator, codec2str(channel->rtp.audio.writeFormat), channel->line->echocancel ? "ON" : "OFF");
-
-	if (!channel->rtp.audio.instance && !sccp_rtp_createServer(d, (sccp_channel_t *)channel, SCCP_RTP_AUDIO)) {	// discard const
+	if (!channel->rtp.audio.instance && !sccp_rtp_createServer(d, (channelPtr)channel, SCCP_RTP_AUDIO)) {			// discard const
 		pbx_log(LOG_WARNING, "%s: Error opening RTP for channel %s\n", d->id, channel->designator);
 
 		uint16_t instance = sccp_device_find_index_for_line(d, channel->line->name);
@@ -580,7 +579,7 @@ void sccp_channel_openReceiveChannel(constChannelPtr channel)
 		return;
 	}
 	if (channel->owner && channel->rtp.audio.writeFormat == SKINNY_CODEC_NONE) {
-		sccp_channel_updateChannelCapability((sccp_channel_t *)channel);					// discard const
+		sccp_channel_updateChannelCapability((channelPtr)channel);							// discard const
 	}
 	sccp_rtp_t *audio = (sccp_rtp_t *) &(channel->rtp.audio);
 	sccp_log((DEBUGCAT_RTP + DEBUGCAT_CHANNEL)) (VERBOSE_PREFIX_3 "%s, OpenReceiveChannel with format %s, payload %d, echocancel: %s, passthrupartyid: %u, pbx_channel_name: %s\n",
@@ -590,7 +589,7 @@ void sccp_channel_openReceiveChannel(constChannelPtr channel)
 		);
 
 	audio->receiveChannelState = SCCP_RTP_STATUS_PROGRESS;
-	if (d->nat >= SCCP_NAT_ON) {											// device is natted
+	if (d->nat >= SCCP_NAT_ON) {												// device is natted
 		sccp_rtp_updateNatRemotePhone(channel, audio);
 	}
 		
@@ -598,11 +597,11 @@ void sccp_channel_openReceiveChannel(constChannelPtr channel)
 #ifdef CS_SCCP_VIDEO
 	if (sccp_device_isVideoSupported(d) && channel->videomode == SCCP_VIDEO_MODE_AUTO) {
 		sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_3 "%s: We can have video, try to start vrtp\n", d->id);
-		if (!channel->rtp.video.instance && !sccp_rtp_createServer(d, (sccp_channel_t *)channel, SCCP_RTP_VIDEO)) {	// discard const
+		if (!channel->rtp.video.instance && !sccp_rtp_createServer(d, (channelPtr)channel, SCCP_RTP_VIDEO)) {		// discard const
 			sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_3 "%s: can not start vrtp\n", d->id);
 		} else {
 			sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_3 "%s: video rtp started\n", d->id);
-			sccp_channel_startMultiMediaTransmission(channel);
+			//sccp_channel_startMultiMediaTransmission(channel);
 		}
 	}
 #endif
@@ -734,11 +733,13 @@ void sccp_channel_startMediaTransmission(constChannelPtr channel)
 
 	if (!d) {
 		pbx_log(LOG_ERROR, "SCCP: (sccp_channel_startMediaTransmission) Could not retrieve device from channel\n");
+		sccp_channel_closeMultiMediaReceiveChannel(channel, FALSE);
 		return;
 	}
 
 	if (!channel->rtp.audio.instance) {
 		sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_3 "%s: can't start rtp media transmission, maybe channel is down %s\n", channel->currentDeviceId, channel->designator);
+		sccp_channel_closeMultiMediaReceiveChannel(channel, FALSE);
 		return;
 	}
 
@@ -758,6 +759,8 @@ void sccp_channel_startMediaTransmission(constChannelPtr channel)
 
 	if (SCCP_RTP_STATUS_INACTIVE == audio->receiveChannelState) {
 		pbx_log(LOG_ERROR, "%s: (sccp_channel_startMediaTransmission) Starting MediaTransmission before OpenReceiveChannel !", channel->currentDeviceId);
+		sccp_channel_closeMultiMediaReceiveChannel(channel, FALSE);
+		return;
 	}
 
 	if (d->nat >= SCCP_NAT_ON) {
@@ -779,7 +782,7 @@ void sccp_channel_startMediaTransmission(constChannelPtr channel)
 	sccp_copy_string(buf1, sccp_netsock_stringify(&audio->phone), sizeof(buf1));
 	sccp_copy_string(buf2, sccp_netsock_stringify(&audio->phone_remote), sizeof(buf2));
 	sccp_log(DEBUGCAT_RTP) (VERBOSE_PREFIX_3 "%s: Tell Phone to send RTP/UDP media from %s to %s (NAT: %s)\n", d->id, buf1, buf2, sccp_nat2str(d->nat));
-	sccp_log(DEBUGCAT_RTP) (VERBOSE_PREFIX_3 "%s: Using codec: %s(%d), TOS %d, Silence Suppression: %s for call with PassThruId: %u and CallID: %u\n", d->id, codec2str(audio->readFormat), audio->readFormat, d->audio_tos, channel->line->silencesuppression ? "ON" : "OFF", channel->passthrupartyid, channel->callid);
+	sccp_log(DEBUGCAT_RTP) (VERBOSE_PREFIX_3 "%s: Using codec:%s(%d), TOS:%d, Silence Suppression:%s for call with PassThruId:%u and CallID:%u\n", d->id, codec2str(audio->readFormat), audio->readFormat, d->audio_tos, channel->line->silencesuppression ? "ON" : "OFF", channel->passthrupartyid, channel->callid);
 }
 
 int sccp_channel_mediaTransmissionStarted(devicePtr d, channelPtr c)
@@ -884,7 +887,7 @@ void sccp_channel_openMultiMediaReceiveChannel(constChannelPtr channel)
 		return;
 	}
 
-	if (!channel->rtp.video.instance && !sccp_rtp_createServer(d, (sccp_channel_t *)channel, SCCP_RTP_VIDEO)) {	// discard const
+	if (!channel->rtp.video.instance && !sccp_rtp_createServer(d, (channelPtr)channel, SCCP_RTP_VIDEO)) {		// discard const
 		pbx_log(LOG_WARNING, "%s: can not start vrtp\n", d->id);
 	}
 
@@ -909,6 +912,7 @@ void sccp_channel_openMultiMediaReceiveChannel(constChannelPtr channel)
 
 	if (joint == SKINNY_CODEC_NONE) {
 		sccp_log((DEBUGCAT_RTP)) (VERBOSE_PREFIX_2 "%s: (openMultiMediaReceiveChannel) No joint codecs found\n", d->id);
+		((sccp_channel_t *)channel)->videomode = SCCP_VIDEO_MODE_OFF;						// discard const
 		return;
 	}
 
@@ -1982,7 +1986,7 @@ void sccp_channel_clean(sccp_channel_t * channel)
 		sccp_dev_setActiveLine(d, NULL);
 		sccp_dev_check_displayprompt(d);
 	}
-	if (channel && channel->privateData) {
+	if (channel->privateData) {
 		if (channel->privateData->device) {
 			sccp_channel_setDevice(channel, NULL);
 		}
@@ -2230,23 +2234,21 @@ void sccp_channel_transfer_cancel(devicePtr d, channelPtr c)
 	 * 7960 loses callplane when cancel transfer (end call on other channel).
 	 * This script sets the hold state for transfered channel explicitly -MC
 	 */
-	if (d) {
-		AUTO_RELEASE(sccp_channel_t, transferee , d->transferChannels.transferee ? sccp_channel_retain(d->transferChannels.transferee) : NULL);
-		if (transferee && transferee != c) {
-			sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_3 "%s: (sccp_channel_transfer_cancel) Denied Receipt of Transferee %d %s by the Receiving Party. Cancelling Transfer and Putting transferee channel on Hold.\n", d->id, transferee->callid, transferee->line->name);
-			transferee->channelStateReason = SCCP_CHANNELSTATEREASON_NORMAL;
-			sccp_channel_closeAllMediaTransmitAndReceive(d, c);
-			sccp_dev_setActiveLine(d, NULL);
-			sccp_indicate(d, transferee, SCCP_CHANNELSTATE_HOLD);
-			sccp_channel_setDevice(transferee, NULL);
+	AUTO_RELEASE(sccp_channel_t, transferee , d->transferChannels.transferee ? sccp_channel_retain(d->transferChannels.transferee) : NULL);
+	if (transferee && transferee != c) {
+		sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_3 "%s: (sccp_channel_transfer_cancel) Denied Receipt of Transferee %d %s by the Receiving Party. Cancelling Transfer and Putting transferee channel on Hold.\n", d->id, transferee->callid, transferee->line->name);
+		transferee->channelStateReason = SCCP_CHANNELSTATEREASON_NORMAL;
+		sccp_channel_closeAllMediaTransmitAndReceive(d, c);
+		sccp_dev_setActiveLine(d, NULL);
+		sccp_indicate(d, transferee, SCCP_CHANNELSTATE_HOLD);
+		sccp_channel_setDevice(transferee, NULL);
 #if ASTERISK_VERSION_GROUP >= 108
-			enum ast_control_transfer control_transfer_message = AST_TRANSFER_FAILED;
-			iPbx.queue_control_data(c->owner, AST_CONTROL_TRANSFER, &control_transfer_message, sizeof(control_transfer_message));
+		enum ast_control_transfer control_transfer_message = AST_TRANSFER_FAILED;
+		iPbx.queue_control_data(c->owner, AST_CONTROL_TRANSFER, &control_transfer_message, sizeof(control_transfer_message));
 #endif
-			sccp_channel_transfer_release(d, transferee);			/* explicit release */
-		} else {
-			pbx_log(LOG_WARNING, "%s: (sccp_channel_transfer_cancel) Could not retain the transferee channel, giving up.\n", d->id);
-		}
+		sccp_channel_transfer_release(d, transferee);			/* explicit release */
+	} else {
+		pbx_log(LOG_WARNING, "%s: (sccp_channel_transfer_cancel) Could not retain the transferee channel, giving up.\n", d->id);
 	}
 }
 
@@ -2282,7 +2284,7 @@ void sccp_channel_transfer_complete(channelPtr sccp_destination_local_channel)
 	}
 	if (!sccp_destination_local_channel->line) {
 		pbx_log(LOG_WARNING, "SCCP: weird error. The channel has no line on channel %d\n", sccp_destination_local_channel->callid);
-		sccp_dev_displayprompt(d, instance, sccp_destination_local_channel ? sccp_destination_local_channel->callid : 0, SKINNY_DISP_NO_LINE_TO_TRANSFER, GLOB(digittimeout));
+		sccp_dev_displayprompt(d, instance, sccp_destination_local_channel->callid, SKINNY_DISP_NO_LINE_TO_TRANSFER, GLOB(digittimeout));
 		return;
 	}
 	// Obtain the source channel on that device

@@ -409,7 +409,7 @@ static sccp_configurationchange_t sccp_config_object_setValue(void *obj, PBX_VAR
 	}
 
 	if ((flags & SCCP_CONFIG_FLAG_IGNORE) == SCCP_CONFIG_FLAG_IGNORE) {
-		sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_2 "SCCP: config parameter %s='%s' in line %d ignored\n", name, value, lineno);
+		//sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_2 "SCCP: config parameter %s='%s' in line %d ignored\n", name, value, lineno);
 		return SCCP_CONFIG_NOUPDATENEEDED;
 	} if ((flags & SCCP_CONFIG_FLAG_CHANGED) == SCCP_CONFIG_FLAG_CHANGED) {
 		pbx_log(LOG_NOTICE, "SCCP: changed config param at %s='%s' in line %d\n - %s -> please check sccp.conf file\n", name, value, lineno, sccpConfigOption->description);
@@ -1413,11 +1413,7 @@ sccp_value_changed_t sccp_config_parse_debug(void *dest, const size_t size, PBX_
 sccp_value_changed_t sccp_config_parse_codec_preferences(void *dest, const size_t size, PBX_VARIABLE_TYPE * v, const sccp_config_segment_t segment)
 {
 	sccp_value_changed_t changed = SCCP_CONFIG_CHANGE_NOCHANGE;
-	struct preferences {
-		skinny_codec_t audio[SKINNY_MAX_CAPABILITIES];
-		skinny_codec_t video[SKINNY_MAX_CAPABILITIES];
-	};
-	struct preferences *prefs = (struct preferences *) dest;
+	skinny_capabilities_t *prefs = (skinny_capabilities_t *) dest;
 	skinny_codec_t new_codecs[SKINNY_MAX_CAPABILITIES] = { 0 };
 	int errors = 0;
 
@@ -1431,7 +1427,7 @@ sccp_value_changed_t sccp_config_parse_codec_preferences(void *dest, const size_
 			errors += 1;
 		}
 	}
-
+	
 	skinny_codec_t audio_prefs[SKINNY_MAX_CAPABILITIES] = {0};
 	sccp_get_codecs_bytype(new_codecs, audio_prefs, SKINNY_CODEC_TYPE_AUDIO);
 #if CS_SCCP_VIDEO
@@ -1442,14 +1438,14 @@ sccp_value_changed_t sccp_config_parse_codec_preferences(void *dest, const size_
 		pbx_log(LOG_NOTICE, "SCCP: (parse_codec preference) Error occured during parsing of the disallowed / allowed codecs\n");
 		changed = SCCP_CONFIG_CHANGE_INVALIDVALUE;
 	} else {
-		if (memcmp(prefs->audio, audio_prefs, SKINNY_MAX_CAPABILITIES * sizeof(skinny_codec_t))) {
-			memcpy(prefs->audio, audio_prefs, SKINNY_MAX_CAPABILITIES * sizeof(skinny_codec_t));
+		if (memcmp(prefs->audio, audio_prefs, sizeof prefs->audio)) {
+			memcpy(prefs->audio, audio_prefs, sizeof prefs->audio);
 			changed = SCCP_CONFIG_CHANGE_CHANGED;
 		}
 #if CS_SCCP_VIDEO
-		if (memcmp(prefs->video, video_prefs, SKINNY_MAX_CAPABILITIES * sizeof(skinny_codec_t))) {
-			memcpy(prefs->video, video_prefs, SKINNY_MAX_CAPABILITIES * sizeof(skinny_codec_t));
-			changed = SCCP_CONFIG_CHANGE_CHANGED;
+		if (memcmp(prefs->video, video_prefs, sizeof prefs->video)) {
+			memcpy(prefs->video, video_prefs, sizeof prefs->video);
+			changed |= SCCP_CONFIG_CHANGE_CHANGED;
 		}
 #endif
 	}
@@ -1673,7 +1669,6 @@ sccp_value_changed_t sccp_config_parse_mailbox(void *dest, const size_t size, PB
 {
 	sccp_value_changed_t changed = SCCP_CONFIG_CHANGE_NOCHANGE;
 	sccp_mailbox_t *mailbox = NULL;
-	char *context, *mbox = NULL;
 
 	SCCP_LIST_HEAD (, sccp_mailbox_t) * mailboxList = dest;
 
@@ -1691,13 +1686,14 @@ sccp_value_changed_t sccp_config_parse_mailbox(void *dest, const size_t size, PB
 		SCCP_LIST_TRAVERSE(mailboxList, mailbox, list) {
 			for (v = vroot; v; v = v->next) {
 				if (!sccp_strlen_zero(v->value)) {
-					mbox = context = pbx_strdupa(v->value);
-					strsep(&context, "@");
-					if (sccp_strlen_zero(context)) {
-						context = "default";
-					}
-					if (sccp_strcaseequals(mailbox->mailbox, mbox) && sccp_strcaseequals(mailbox->context, context)) {	// variable found
+					if (strstr(v->value, "@") && sccp_strcaseequals(mailbox->uniqueid, v->value)) {
 						continue;
+					} else {
+						char uniqueid[SCCP_MAX_MAILBOX_UNIQUEID];
+						snprintf(uniqueid, sizeof(uniqueid), "%s@default", v->value);
+						if (sccp_strcaseequals(mailbox->uniqueid, v->value)) {
+							continue;
+						}
 					}
 					notfound |= TRUE;
 				}
@@ -1706,24 +1702,16 @@ sccp_value_changed_t sccp_config_parse_mailbox(void *dest, const size_t size, PB
 	}
 	if (varCount != listCount || notfound) {								// build new list
 		while ((mailbox = SCCP_LIST_REMOVE_HEAD(mailboxList, list))) {					// clear list
-			sccp_free(mailbox->mailbox);
-			sccp_free(mailbox->context);
 			sccp_free(mailbox);
 		}
 		for (v = vroot; v; v = v->next) {								// create new list
 			if (!sccp_strlen_zero(v->value)) {
-				mbox = context = pbx_strdupa(v->value);
-				strsep(&context, "@");
-				if (sccp_strlen_zero(context)) {
-					context = "default";
-				}
-				sccp_log((DEBUGCAT_CONFIG + DEBUGCAT_HIGH)) (VERBOSE_PREFIX_3 "add new mailbox: %s@%s\n", mbox, context);
+				sccp_log((DEBUGCAT_CONFIG + DEBUGCAT_HIGH)) (VERBOSE_PREFIX_3 "add new mailbox: %s\n", v->value);
 				if (!(mailbox = sccp_calloc(1, sizeof(sccp_mailbox_t)))) {
 					pbx_log(LOG_ERROR, SS_Memory_Allocation_Error, "SCCP");
 					return SCCP_CONFIG_CHANGE_ERROR;
 				}
-				mailbox->mailbox = pbx_strdup(mbox);
-				mailbox->context = pbx_strdup(context);
+				snprintf(mailbox->uniqueid, sizeof(mailbox->uniqueid), "%s%s", v->value, !strstr(v->value, "@") ? "@default" : "");
 				SCCP_LIST_INSERT_TAIL(mailboxList, mailbox, list);
 			}
 		}
@@ -2450,41 +2438,36 @@ boolean_t sccp_config_readDevicesLines(sccp_readingtype_t readingtype)
 		} else if (!strcasecmp(utype, "device")) {
 			// check minimum requirements for a device
 			sccp_log((DEBUGCAT_CONFIG)) (VERBOSE_PREFIX_2 "Parsing device [%s]\n", cat);
-			if (sccp_strlen_zero(pbx_variable_retrieve(GLOB(cfg), cat, "devicetype"))) {
-				pbx_log(LOG_WARNING, "Unknown type '%s' for '%s' in %s\n", utype, cat, "sccp.conf");
-				continue;
+			v = ast_variable_browse(GLOB(cfg), cat);
+
+			// Try to find out if we have the device already on file.
+			// However, do not look into realtime, since
+			// we might have been asked to create a device for realtime addition,
+			// thus causing an infinite loop / recursion.
+			AUTO_RELEASE(sccp_device_t, device, sccp_device_find_byid(cat, FALSE));
+			sccp_nat_t nat = SCCP_NAT_AUTO;
+
+			/* create new device with default values */
+			if (!device) {
+				device = sccp_device_create(cat);
+				// sccp_copy_string(d->id, cat, sizeof(d->id));         /* set device name */
+				sccp_device_addToGlobals(device);
+				device_count++;
 			} else {
-				v = ast_variable_browse(GLOB(cfg), cat);
-
-				// Try to find out if we have the device already on file.
-				// However, do not look into realtime, since
-				// we might have been asked to create a device for realtime addition,
-				// thus causing an infinite loop / recursion.
-				AUTO_RELEASE(sccp_device_t, device, sccp_device_find_byid(cat, FALSE));
-				sccp_nat_t nat = SCCP_NAT_AUTO;
-
-				/* create new device with default values */
-				if (!device) {
-					device = sccp_device_create(cat);
-					// sccp_copy_string(d->id, cat, sizeof(d->id));         /* set device name */
-					sccp_device_addToGlobals(device);
-					device_count++;
-				} else {
-					if (device->pendingDelete) {
-						nat = device->nat;
-						device->pendingDelete = 0;
-					}
+				if (device->pendingDelete) {
+					nat = device->nat;
+					device->pendingDelete = 0;
 				}
-				sccp_config_buildDevice(device, v, cat, FALSE);
-				sccp_log((DEBUGCAT_CONFIG)) (VERBOSE_PREFIX_3 "found device %d: %s\n", device_count, cat);
-				/* load saved settings from ast db */
-				sccp_config_restoreDeviceFeatureStatus(device);
-				
-				/* restore current nat status, if device does not get restarted */
-				if (0 == device->pendingDelete && sccp_device_getRegistrationState(device) != SKINNY_DEVICE_RS_NONE) {
-					if (SCCP_NAT_AUTO == device->nat && (SCCP_NAT_AUTO == nat || SCCP_NAT_AUTO_OFF == nat || SCCP_NAT_AUTO_ON == nat)) {
-						device->nat = nat;
-					}
+			}
+			sccp_config_buildDevice(device, v, cat, FALSE);
+			sccp_log((DEBUGCAT_CONFIG)) (VERBOSE_PREFIX_3 "found device %d: %s\n", device_count, cat);
+			/* load saved settings from ast db */
+			sccp_config_restoreDeviceFeatureStatus(device);
+			
+			/* restore current nat status, if device does not get restarted */
+			if (0 == device->pendingDelete && sccp_device_getRegistrationState(device) != SKINNY_DEVICE_RS_NONE) {
+				if (SCCP_NAT_AUTO == device->nat && (SCCP_NAT_AUTO == nat || SCCP_NAT_AUTO_OFF == nat || SCCP_NAT_AUTO_ON == nat)) {
+					device->nat = nat;
 				}
 			}
 		} else if (!strcasecmp(utype, "line")) {

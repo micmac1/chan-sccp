@@ -1,4 +1,3 @@
-
 /*!
  * \file        sccp_actions.c
  * \brief       SCCP Actions Class
@@ -954,7 +953,6 @@ void handle_register(constSessionPtr s, devicePtr maybe_d, constMessagePtr msg_i
 
 	// device->session = s;
 	sccp_session_resetLastKeepAlive(s);
-	device->mwilight = 0;
 	device->protocolversion = protocolVer;
 	device->status.token = SCCP_TOKEN_STATE_NOTOKEN;
 	sccp_copy_string(device->loadedimageversion, msg_in->data.RegisterMessage.loadInfo, StationMaxImageVersionSize);
@@ -998,6 +996,7 @@ void handle_register(constSessionPtr s, devicePtr maybe_d, constMessagePtr msg_i
 	return;
 
 FUNC_EXIT:
+/*
 #if CS_REFCOUNT_DEBUG
 	if (device) {
 		pbx_str_t *buf = pbx_str_create(DEFAULT_PBX_STR_BUFFERSIZE);
@@ -1006,6 +1005,7 @@ FUNC_EXIT:
 		sccp_free(buf);
 	}
 #endif
+*/
 	sccp_session_stopthread(s, SKINNY_DEVICE_RS_FAILED);
 	if (device) {
 		device->session = NULL;
@@ -1165,7 +1165,8 @@ static btnlist *sccp_make_button_template(devicePtr d)
 
 							case SCCP_FEATURE_PARKINGLOT:
 #ifdef CS_SCCP_PARK
-								if (iParkingLot.attachObserver && iParkingLot.attachObserver(buttonconfig->button.feature.options, d, buttonconfig->instance)) {
+								//if (iParkingLot.attachObserver && iParkingLot.attachObserver(buttonconfig->button.feature.options, d, buttonconfig->instance)) {
+								if (iParkingLot.attachObserver) {
 									if (d->inuseprotocolversion > 15) {
 										btn[i].type = SKINNY_BUTTONTYPE_MULTIBLINKFEATURE;
 										buttonconfig->button.feature.status = 0x010000;
@@ -1257,7 +1258,7 @@ static btnlist *sccp_make_button_template(devicePtr d)
 
 						}
 					} else {
-						pbx_log(LOG_WARNING, "%s: Cannot handle feature %d with label:%s (No regular buttons left). Skipped\n", d->id, buttonconfig->index + 1, buttonconfig->label);
+						sccp_log(DEBUGCAT_BUTTONTEMPLATE)(VERBOSE_PREFIX_3 "%s: Cannot handle feature %d with label:%s (No regular buttons left). Skipped\n", d->id, buttonconfig->index + 1, buttonconfig->label);
 						btn[i].type = SKINNY_BUTTONTYPE_UNUSED;
 					}
 					break;
@@ -1337,6 +1338,12 @@ void handle_accessorystatus_message(constSessionPtr s, devicePtr d, constMessage
 	sccp_accessorystate_t state = letohl(msg_in->data.AccessoryStatusMessage.lel_AccessoryStatus);
 
 	sccp_device_setAccessoryStatus(d, accessory, state);
+
+	// these devices don't generate an offhook stimulus
+	//if (d->skinny_type == SKINNY_DEVICETYPE_CISCO6901) {
+	//	handle_offhook(s, d, msg_in);
+	//}
+	// use <alwaysUsePrimeLineVoiceMail>true</alwaysUsePrimeLineVoiceMail> in sep-file instead
 }
 
 /*!
@@ -1775,7 +1782,7 @@ static void handle_stimulus_line(constDevicePtr d, constLinePtr l, const uint16_
 		return;
 	}
 
-	sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_3 "%s: Line Key press on line %s\n", d->id, (l) ? l->name : "(nil)");
+	sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_3 "%s: Line Key press on line %s\n", d->id, l->name);
 	{
 		AUTO_RELEASE(sccp_channel_t, channel , NULL);
 		/* see if have an active call on this instance / callid / device */
@@ -2138,7 +2145,7 @@ static void handle_feature_action(constDevicePtr d, const int instance, const bo
 
 			if (sccp_strcaseequals(config->button.feature.options, "callpresent")) {
 				res = d->privacyFeature.status & SCCP_PRIVACYFEATURE_CALLPRESENT;
-				sccp_featureConfiguration_t *privacyFeature = (sccp_featureConfiguration_t *)&d->privacyFeature;		/* discard const */
+				sccp_featureConfiguration_t *privacyFeature = (sccp_featureConfiguration_t * const)&d->privacyFeature;		/* discard const */
 
 				//sccp_log((DEBUGCAT_FEATURE_BUTTON + DEBUGCAT_FEATURE)) (VERBOSE_PREFIX_3 "%s: device->privacyFeature.status=%d\n", d->id, d->privacyFeature.status);
 				//sccp_log((DEBUGCAT_FEATURE_BUTTON + DEBUGCAT_FEATURE)) (VERBOSE_PREFIX_3 "%s: result=%d\n", d->id, res);
@@ -2186,7 +2193,7 @@ static void handle_feature_action(constDevicePtr d, const int instance, const bo
 				config->button.feature.status = (config->button.feature.status == 0) ? 1 : 0;
 			}
 
-			sccp_featureConfiguration_t *dndFeature = (sccp_featureConfiguration_t *)&d->dndFeature;		/* discard const */
+			sccp_featureConfiguration_t *dndFeature = (sccp_featureConfiguration_t *const)&d->dndFeature;		/* discard const */
 			if (sccp_strcaseequals(config->button.feature.options, "silent")) {
 				dndFeature->status = (config->button.feature.status) ? SCCP_DNDMODE_SILENT : SCCP_DNDMODE_OFF;
 			} else if (sccp_strcaseequals(config->button.feature.options, "busy")) {
@@ -2247,7 +2254,7 @@ static void handle_feature_action(constDevicePtr d, const int instance, const bo
 			}
 			featureStat1 = (featureStat1 + 1) % 7;
 
-			sccp_featureConfiguration_t *priFeature = (sccp_featureConfiguration_t *)&d->priFeature;		/* discard const */
+			sccp_featureConfiguration_t *priFeature = (sccp_featureConfiguration_t *const)&d->priFeature;		/* discard const */
 
 			priFeature->status = ((featureStat3 + 1) << 16) | ((featureStat2 + 1) << 8) | (featureStat1 + 1);
 			//sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_3 "%s: priority feature status: %d, %d, %d, total: %d\n", d->id, featureStat3, featureStat2, featureStat1, priFeature->status);

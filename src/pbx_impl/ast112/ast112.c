@@ -18,7 +18,6 @@
 #include "sccp_utils.h"
 #include "sccp_indicate.h"
 #include "sccp_hint.h"
-#include "sccp_mwi.h"
 #include "sccp_appfunctions.h"
 #include "sccp_management.h"
 #include "sccp_netsock.h"
@@ -163,7 +162,7 @@ static struct ast_channel_tech sccp_tech = {
 	exception:		NULL,
 //	bridge:			sccp_astwrap_rtpBridge,
         bridge:			ast_rtp_instance_bridge,
-	early_bridge:		NULL,
+	early_bridge:		ast_rtp_instance_early_bridge,
 	indicate:		sccp_astwrap_indicate,
 	fixup:			sccp_astwrap_fixup,
 	setoption:		NULL,
@@ -213,7 +212,7 @@ struct ast_channel_tech sccp_tech = {
 	.bridge 		= ast_rtp_instance_bridge,
 //	.bridge 		= sccp_astwrap_rtpBridge,
 #endif
-	//.early_bridge		= ast_rtp_early_bridge,
+	.early_bridge		=ast_rtp_instance_early_bridge,
 	//.bridged_channel      =
 
 	.send_text 		= sccp_pbx_sendtext,
@@ -1525,7 +1524,7 @@ static PBX_CHANNEL_TYPE *sccp_astwrap_request(const char *type, struct ast_forma
 	 channel.c:5080 ast_write: Codec mismatch on channel SCCP/xxx-0000002d setting write format to g722 from unknown native formats (nothing)
 	*/
 	if (!channel->capabilities.audio[0]) {
-		skinny_codec_t codecs[] = { SKINNY_CODEC_WIDEBAND_256K };
+		skinny_codec_t codecs[SKINNY_MAX_CAPABILITIES] = { SKINNY_CODEC_WIDEBAND_256K, 0};
 		sccp_astwrap_setNativeAudioFormats(channel, codecs, 1);
 		sccp_astwrap_setReadFormat(channel, SKINNY_CODEC_WIDEBAND_256K);
 		sccp_astwrap_setWriteFormat(channel, SKINNY_CODEC_WIDEBAND_256K);
@@ -3401,7 +3400,6 @@ static int unload_module(void)
 	unregister_channel_tech(&sccp_tech);
 	sccp_unregister_dialplan_functions();
 	sccp_unregister_cli();
-	sccp_mwi_module_stop();
 #ifdef CS_SCCP_MANAGER
 	sccp_unregister_management();
 #endif
