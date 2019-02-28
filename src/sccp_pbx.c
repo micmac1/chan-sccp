@@ -290,6 +290,7 @@ int sccp_pbx_call(sccp_channel_t * c, char *dest, int timeout)
 				} else {
 					/* shared line -> create a temp channel to call forward destination and tie them together */
 					pbx_log(LOG_NOTICE, "%s: initialize cfwd%s for line %s\n", linedevice->device->id, (linedevice->cfwdAll.enabled ? "All" : (linedevice->cfwdBusy.enabled ? "Busy" : "None")), l->name);
+					pbx_builtin_setvar_helper(c->owner, "FORWARDERNAME", pbx_channel_name(c->owner));
 					if (sccp_channel_forward(c, linedevice, linedevice->cfwdAll.enabled ? linedevice->cfwdAll.number : linedevice->cfwdBusy.number) == 0) {
 						sccp_device_sendcallstate(linedevice->device, linedevice->lineInstance, c->callid, SKINNY_CALLSTATE_INTERCOMONEWAY, SKINNY_CALLPRIORITY_NORMAL, SKINNY_CALLINFO_VISIBILITY_DEFAULT);
 						sccp_channel_send_callinfo(linedevice->device, c);
@@ -550,9 +551,40 @@ int sccp_pbx_answer(sccp_channel_t * channel)
 
 	sccp_log((DEBUGCAT_PBX + DEBUGCAT_DEVICE)) (VERBOSE_PREFIX_3 "%s: sccp_pbx_answer checking parent channel\n", c->currentDeviceId);
 	if (c->parentChannel) {											// containing a retained channel, final release at the end
+		PBX_CHANNEL_TYPE *forwarded = NULL;
+		PBX_CHANNEL_TYPE *replace_chan = NULL;
 		/* we are a forwarded call, bridge me with my parent */
-		sccp_log((DEBUGCAT_PBX + DEBUGCAT_DEVICE)) (VERBOSE_PREFIX_3 "%s: bridge me with my parent's channel %s\n", c->currentDeviceId, iPbx.getChannelName(c));
+		pbx_channel_lock(c->parentChannel->owner);
+		forwarded = ast_channel_ref(c->parentChannel->owner);
+		pbx_channel_unlock(c->parentChannel->owner);
 
+		pbx_channel_lock(c->owner);
+		const char *forwardingChannelName = pbx_builtin_getvar_helper(c->owner, CS_BRIDGEPEERNAME);
+		pbx_channel_unlock(c->owner);
+
+		// get channel to replace in the second channel
+		if ((replace_chan = ast_channel_get_by_name(forwardingChannelName))) {
+			pbx_channel_lock(replace_chan);
+			ast_channel_ref(replace_chan);
+			pbx_channel_unlock(replace_chan);
+			if (replace_chan) {
+				// the forwarded channel will take the place of the forwarder.
+				sccp_log((DEBUGCAT_PBX + DEBUGCAT_DEVICE)) (VERBOSE_PREFIX_3 "%s: handling forwarded call. Replace %s with %s.\n", c->designator, pbx_channel_name(replace_chan), pbx_channel_name(forwarded));
+				ast_raw_answer(replace_chan);
+				res = ast_channel_move(forwarded, replace_chan);
+				if (!res) {
+					// after the masqueration, we can handling the forwarder
+					pbx_channel_set_hangupcause(replace_chan, AST_CAUSE_REDIRECTED_TO_NEW_DESTINATION);
+					ast_hangup(replace_chan);
+
+					//iPbx.sendRedirectedUpdate(forwarded, calling_number, calling_name, called_number, called_name, AST_REDIRECTING_REASON_UNCONDITIONAL);
+					pbx_indicate(c->owner, AST_CONTROL_CONNECTED_LINE);
+				}
+				//ast_channel_unref(replace_chan);
+			}
+		}
+		ast_channel_unref(forwarded);
+# if 0
 		PBX_CHANNEL_TYPE *astForwardedChannel = c->parentChannel->owner;
 		PBX_CHANNEL_TYPE *br = NULL;
 
@@ -613,6 +645,7 @@ int sccp_pbx_answer(sccp_channel_t * channel)
 			res = -1;
 		}
 		// FINISH
+#endif
 	} else {
 
 		sccp_log((DEBUGCAT_CORE)) (VERBOSE_PREFIX_3 "%s: (sccp_pbx_answer) Outgoing call %s has been answered by remote party\n", c->currentDeviceId, iPbx.getChannelName(c));
