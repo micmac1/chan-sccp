@@ -2525,44 +2525,43 @@ int sccp_channel_forward(sccp_channel_t * sccp_channel_parent, sccp_linedevices_
 	memcpy(&sccp_forwarding_channel->preferences.audio, sccp_channel_parent->preferences.audio, sizeof(sccp_channel_parent->preferences.audio));
 
 	/* ok the number exist. allocate the asterisk channel */
-	if (!sccp_pbx_channel_allocate(sccp_forwarding_channel, NULL, sccp_channel_parent->owner)) {
+	if (!sccp_pbx_channel_allocate(sccp_forwarding_channel, NULL, sccp_channel_parent->owner))
+	{
 		pbx_log(LOG_WARNING, "%s: Unable to allocate a new channel for line %s\n", lineDevice->device->id, sccp_forwarding_channel->line->name);
 		sccp_line_removeChannel(sccp_forwarding_channel->line, sccp_forwarding_channel);
 		sccp_channel_clean(sccp_forwarding_channel);
-		// sccp_channel_destroy(sccp_forwarding_channel);
-
 		return -1;
 	}
 	/* Update rtp setting to match predecessor */
-	skinny_codec_t codecs[] = { SKINNY_CODEC_WIDEBAND_256K };
-	iPbx.set_nativeAudioFormats(sccp_forwarding_channel, codecs, 1);
-	iPbx.rtp_setWriteFormat(sccp_forwarding_channel, SKINNY_CODEC_WIDEBAND_256K);
-	iPbx.rtp_setReadFormat(sccp_forwarding_channel, SKINNY_CODEC_WIDEBAND_256K);
-	sccp_channel_updateChannelCapability(sccp_forwarding_channel);
+	//skinny_codec_t codecs[] = { SKINNY_CODEC_WIDEBAND_256K };
+	//iPbx.set_nativeAudioFormats(sccp_forwarding_channel, codecs, 1);
+	//iPbx.rtp_setWriteFormat(sccp_forwarding_channel, SKINNY_CODEC_WIDEBAND_256K);
+	//iPbx.rtp_setReadFormat(sccp_forwarding_channel, SKINNY_CODEC_WIDEBAND_256K);
+	//sccp_channel_updateChannelCapability(sccp_forwarding_channel);
 
 	/* setting callerid */
 	if (iPbx.set_callerid_number) {
-		iPbx.set_callerid_number(sccp_forwarding_channel->owner, calling_num);
+	//	iPbx.set_callerid_number(sccp_forwarding_channel->owner, calling_num);
 	}
 
 	if (iPbx.set_callerid_name) {
-		iPbx.set_callerid_name(sccp_forwarding_channel->owner, calling_name);
+	//	iPbx.set_callerid_name(sccp_forwarding_channel->owner, calling_name);
 	}
 
 	if (iPbx.set_callerid_ani) {
-		iPbx.set_callerid_ani(sccp_forwarding_channel->owner, dialedNumber);
+	//	iPbx.set_callerid_ani(sccp_forwarding_channel->owner, dialedNumber);
 	}
 
 	if (iPbx.set_callerid_dnid) {
-		iPbx.set_callerid_dnid(sccp_forwarding_channel->owner, dialedNumber);
+	//	iPbx.set_callerid_dnid(sccp_forwarding_channel->owner, dialedNumber);
 	}
 
 	if (iPbx.set_callerid_redirectedParty) {
-		iPbx.set_callerid_redirectedParty(sccp_forwarding_channel->owner, called_num, called_name);
+	//	iPbx.set_callerid_redirectedParty(sccp_forwarding_channel->owner, called_num, called_name);
 	}
 
 	if (iPbx.set_callerid_redirectingParty) {
-		iPbx.set_callerid_redirectingParty(sccp_forwarding_channel->owner, sccp_forwarding_channel->line->cid_num, sccp_forwarding_channel->line->cid_name);
+	//	iPbx.set_callerid_redirectingParty(sccp_forwarding_channel->owner, sccp_forwarding_channel->line->cid_num, sccp_forwarding_channel->line->cid_name);
 	}
 
 	/* dial sccp_forwarding_channel */
@@ -2577,7 +2576,7 @@ int sccp_channel_forward(sccp_channel_t * sccp_channel_parent, sccp_linedevices_
 		pbx_log(LOG_NOTICE, "%s: (sccp_channel_forward) channel %s is dialing number %s\n", sccp_forwarding_channel->currentDeviceId, sccp_forwarding_channel->designator, dialedNumber);
 		/* Answer dialplan command works only when in RINGING OR RING ast_state */
 		iPbx.set_callstate(sccp_forwarding_channel, AST_STATE_RING);
-		pbx_channel_call_forward_set(sccp_forwarding_channel->owner, dialedNumber);
+		//pbx_channel_call_forward_set(sccp_forwarding_channel->owner, dialedNumber);
 #if CS_AST_CONTROL_REDIRECTING
 		iPbx.queue_control(sccp_forwarding_channel->owner, AST_CONTROL_REDIRECTING);
 #endif

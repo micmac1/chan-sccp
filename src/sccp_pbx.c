@@ -551,6 +551,7 @@ int sccp_pbx_answer(sccp_channel_t * channel)
 
 	sccp_log((DEBUGCAT_PBX + DEBUGCAT_DEVICE)) (VERBOSE_PREFIX_3 "%s: sccp_pbx_answer checking parent channel\n", c->currentDeviceId);
 	if (c->parentChannel) {											// containing a retained channel, final release at the end
+//#if 0
 		PBX_CHANNEL_TYPE *forwarded = NULL;
 		PBX_CHANNEL_TYPE *replace_chan = NULL;
 		/* we are a forwarded call, bridge me with my parent */
@@ -584,6 +585,7 @@ int sccp_pbx_answer(sccp_channel_t * channel)
 			}
 		}
 		ast_channel_unref(forwarded);
+//#endif
 # if 0
 		PBX_CHANNEL_TYPE *astForwardedChannel = c->parentChannel->owner;
 		PBX_CHANNEL_TYPE *br = NULL;
